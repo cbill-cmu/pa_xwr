@@ -38,7 +38,7 @@ from typing import Any
 
 import yaml
 
-from radar_power_study import capture
+from pa_xwr import capture
 
 logger = logging.getLogger("sweep")
 
