@@ -2,13 +2,19 @@
 sweep.py — Parameter-sweep orchestrator for the power-study v2 system.
 
 Reads a sweep spec, plans the segments, validates each config, prompts the
-user to start the N6705B datalog, then runs every segment back-to-back while
-logging wall-clock timestamps so the offline analyzer can segment the
-datalog after the fact.
+user to start the N6705B datalog, runs a calibration burst, then runs every
+segment back-to-back while logging wall-clock timestamps so the offline
+analyzer can segment the datalog after the fact.
+
+The calibration burst at the start and end produces a known idle/chirp/idle
+pattern (two distinct chirp pulses separated by an idle gap) that the
+analyzer detects to anchor the datalog's time axis to the script's wall-clock
+timestamps.
 
 Usage:
-    uv run scripts/sweep.py --spec sweeps/frame_period_sweep.yaml
-    uv run scripts/sweep.py --spec sweeps/frame_period_sweep.yaml \\
+    uv run rps-sweep --spec sweeps/frame_period_sweep.yaml
+    uv run rps-sweep --spec sweeps/frame_period_sweep.yaml --dry-run
+    uv run rps-sweep --spec sweeps/frame_period_sweep.yaml \\
         --replicates 1 --on-error abort
 """
 
@@ -35,6 +41,29 @@ import yaml
 from pa_xwr import capture
 
 logger = logging.getLogger("sweep")
+
+# -----------------------------------------------------------------------------
+# Calibration burst configuration.
+#
+# The burst produces a current signature that the analyzer locates in the
+# datalog to align wall-clock time with datalog time. The pattern is two
+# chirp pulses separated by an idle gap - much harder to confuse with random
+# transients than a single pulse.
+#
+# Total burst duration = sum of all phase durations = 35 seconds.
+# -----------------------------------------------------------------------------
+_CAL_BURST_PATTERN: list[tuple[str, float, bool]] = [
+    # (phase_name, duration_seconds, is_chirping)
+    ("wait_1",      10.0, False),
+    ("cal_pulse_1",  5.0, True),
+    ("wait_2",      10.0, False),
+    ("cal_pulse_2",  5.0, True),
+    ("wait_3",       5.0, False),
+]
+CAL_BURST_DURATION_S: float = sum(d for _, d, _ in _CAL_BURST_PATTERN)
+#: Datalog seconds from cal-burst start to the falling edge of the SECOND
+#: cal pulse — this is the anchor point the analyzer looks for.
+CAL_BURST_ANCHOR_OFFSET_S: float = 10 + 5 + 10 + 5   # = 30.0
 
 # -----------------------------------------------------------------------------
 # Static validation — catch obvious config errors without touching hardware.
@@ -255,14 +284,80 @@ def append_segment_row(path: Path, seg: Segment) -> None:
 
 
 # -----------------------------------------------------------------------------
+# Calibration burst
+# -----------------------------------------------------------------------------
+
+def run_calibration_burst(
+    device_template: dict,
+    label: str,
+    *,
+    dry_run: bool = False,
+) -> dict:
+    """Run one calibration burst (idle / chirp / idle / chirp / idle).
+
+    Uses the device template's defaults as the chirping config so the burst's
+    current signature is reproducible across runs of the same sweep, even if
+    the sweep itself varies different parameters.
+
+    Returns a dict describing the phases with wall-clock timestamps. The
+    analyzer reads these from calibration.json to align datalog time with
+    wall-clock time.
+    """
+    logger.info("Starting %s calibration burst (%.0f s)...",
+                label, CAL_BURST_DURATION_S)
+    cal_config = copy.deepcopy(device_template)
+    burst_start_iso = dt.datetime.now(dt.timezone.utc).isoformat()
+
+    phases: list[dict] = []
+    for phase_name, duration, is_chirping in _CAL_BURST_PATTERN:
+        phase_start_iso = dt.datetime.now(dt.timezone.utc).isoformat()
+        logger.info("  cal phase '%s' (%.0f s, chirping=%s)",
+                    phase_name, duration, is_chirping)
+
+        if is_chirping:
+            result = capture.run_segment(
+                cal_config, duration, dry_run=dry_run)
+            if not result.success:
+                logger.warning("Cal phase '%s' chirping failed: %s",
+                               phase_name, result.error)
+        else:
+            time.sleep(duration)
+
+        phase_end_iso = dt.datetime.now(dt.timezone.utc).isoformat()
+        phases.append({
+            "name": phase_name,
+            "duration_s": duration,
+            "chirping": is_chirping,
+            "start_iso": phase_start_iso,
+            "end_iso": phase_end_iso,
+        })
+
+    burst_end_iso = dt.datetime.now(dt.timezone.utc).isoformat()
+    logger.info("%s calibration burst done.", label.capitalize())
+
+    return {
+        "label": label,
+        "start_iso": burst_start_iso,
+        "end_iso": burst_end_iso,
+        "anchor_offset_s": CAL_BURST_ANCHOR_OFFSET_S,
+        "phases": phases,
+    }
+
+
+# -----------------------------------------------------------------------------
 # The main sweep loop
 # -----------------------------------------------------------------------------
 
 def estimate_duration_s(n_segments: int, segment_duration: float,
                        idle_between: float) -> float:
     """Time the user must dedicate to the datalog."""
-    # +30s for setup / start / stop padding on each end.
-    return n_segments * (segment_duration + idle_between) + 30.0
+    # Two cal bursts (start + end) plus the segment sweep itself plus a
+    # 30 s buffer for datalog start/stop padding.
+    return (
+        2 * CAL_BURST_DURATION_S
+        + n_segments * (segment_duration + idle_between)
+        + 30.0
+    )
 
 
 def run_sweep(
@@ -369,9 +464,12 @@ def run_sweep(
     if not skip_prompt:
         input("[Press Enter to begin]")
 
-    # -- Run segments --
+    # -- Run start calibration burst --
     run_started = dt.datetime.now(dt.timezone.utc).isoformat()
+    cal_start = run_calibration_burst(
+        device_template, "start", dry_run=dry_run)
 
+    # -- Run segments --
     for seg in segments:
         seg.start_wallclock_iso = dt.datetime.now(
             dt.timezone.utc).isoformat()
@@ -398,7 +496,22 @@ def run_sweep(
 
         time.sleep(settings["idle_between"])
 
+    # -- Run end calibration burst --
+    cal_end = run_calibration_burst(
+        device_template, "end", dry_run=dry_run)
     run_ended = dt.datetime.now(dt.timezone.utc).isoformat()
+
+    # -- Write calibration.json --
+    with (study_dir / "calibration.json").open("w") as f:
+        json.dump({
+            "anchor_offset_s": CAL_BURST_ANCHOR_OFFSET_S,
+            "pattern": [
+                {"name": n, "duration_s": d, "chirping": c}
+                for n, d, c in _CAL_BURST_PATTERN
+            ],
+            "start_burst": cal_start,
+            "end_burst": cal_end,
+        }, f, indent=2)
 
     # -- Write manifest --
     completed = sum(1 for s in segments if s.status == "ok")
