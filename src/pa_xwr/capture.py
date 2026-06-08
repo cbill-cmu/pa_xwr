@@ -39,6 +39,31 @@ class SegmentResult:
         }
 
 
+# Radar-config keys that xwr expects as `float`. YAML doesn't distinguish
+# `25` from `25.0`, so we coerce here at the boundary to avoid forcing the
+# user to remember which fields need a decimal point.
+_FLOAT_RADAR_KEYS = (
+    "frequency", "freq_slope",
+    "ramp_end_time", "idle_time",
+    "tx_start_time", "adc_start_time",
+    "sample_rate", "frame_period",
+)
+
+
+def _coerce_config_types(config: dict) -> dict:
+    """Return a copy of `config` with numeric values normalized to the types
+    xwr's type-checked API expects. Currently casts the radar fields listed in
+    _FLOAT_RADAR_KEYS to `float` (YAML may parse them as `int`)."""
+    import copy
+    out = copy.deepcopy(config)
+    radar = out.get("radar", {})
+    for key in _FLOAT_RADAR_KEYS:
+        if key in radar and isinstance(radar[key], int) and not isinstance(
+                radar[key], bool):
+            radar[key] = float(radar[key])
+    return out
+
+
 def run_segment(
     config: dict,
     duration_s: float,
@@ -61,6 +86,7 @@ def run_segment(
     message in `error`. The caller (sweep.py) decides whether to abort or
     continue the sweep.
     """
+    config = _coerce_config_types(config)
     if dry_run:
         return _run_segment_dry(config, duration_s)
     return _run_segment_real(config, duration_s)
