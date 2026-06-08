@@ -1,0 +1,31 @@
+# =============================================================================
+# Sweep Spec: 1-D sweep of frame_period (= 1 / frame_rate)
+# =============================================================================
+#
+# This is the simplest case. We vary `frame_period` across 5 values while
+# every other parameter stays at its device-template default. Each value gets
+# 3 replicates for variance estimation. Result: 15 segments, ~9 minutes of
+# bench time + 35 s calibration burst at start and end.
+#
+# How to run:
+#   uv run scripts/sweep.py --spec sweeps/frame_period_sweep.yaml
+#
+# How to analyze:
+#   uv run scripts/analyze.py studies/<generated-folder-name>/
+# =============================================================================
+
+study_name: frame_period_sweep
+device: AWR1843                  # filename in devices/ (without .yaml)
+
+sweep:
+  # The parameter you're varying.
+  param: frame_period            # name from the device template
+  values: [100, 50, 25, 20, 10]  # in the parameter's native units (ms)
+                                 # corresponds to frame rates of 10, 20, 40, 50, 100 fps
+
+  replicates: 3                  # override on CLI with --replicates if you want
+  segment_duration: 30           # seconds of chirping per segment
+  idle_between: 5                # seconds of idle between segments (thermal settle)
+
+  order: random                  # random | sequential
+                                 # random recommended - protects against thermal drift

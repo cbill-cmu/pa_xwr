@@ -1,0 +1,53 @@
+# =============================================================================
+# Device Template: AWR1843 (covers AWR1843BOOST and AWR1843AOP variants)
+# =============================================================================
+#
+# This is a valid xwr config YAML on its own. The sweep script reads it as a
+# starting point and overrides only the parameters being swept.
+#
+# To add a new radar to the study, copy this file, rename it, and adjust the
+# defaults and limits for that device. The sweep script doesn't need to know
+# anything about specific radars - it just substitutes values into whatever
+# template you point it at.
+#
+# Device-specific limits (for your reference - the xwr constraint check
+# enforces these at runtime):
+#   - L3 memory: 1 MB (limits adc_samples * frame_length * 4 * 2 * 2 < 1048576)
+#   - Frequency band: 76 - 81 GHz (FMCW band)
+#   - Max bandwidth: 4 GHz
+#   - Max ADC sample rate: 25 MHz (25000 ksps)
+#   - frame_length must be a power of 2 (16, 32, 64, 128, 256)
+#   - adc_samples must be a power of 2 (64, 128, 256, 512)
+#
+# Power-of-2 constraint applies to frame_length and adc_samples because the
+# on-chip FFT engine uses radix-2 FFTs.
+# =============================================================================
+
+radar:
+  device: AWR1843        # device family identifier for xwr
+  port: null             # auto-detect serial port; override if multiple radars
+
+  # -- RF chirp shape --
+  frequency: 77.0        # GHz - start of each chirp's frequency ramp
+  freq_slope: 67.012     # MHz/us - rate of frequency change during the ramp
+  ramp_end_time: 34.00   # us - total chirp duration (ramp portion)
+  idle_time: 6.0         # us - dead time between consecutive chirps
+  tx_start_time: 1.0     # us - TX-on delay after each chirp starts
+  adc_start_time: 5.7    # us - ADC-sample-start delay after each chirp starts
+
+  # -- ADC capture --
+  adc_samples: 256       # number of ADC samples per chirp (range bins)
+                         # MUST be a power of 2: 64, 128, 256, 512
+  sample_rate: 10000     # ksps - ADC sample rate (max 25000 on this device)
+
+  # -- Frame structure --
+  frame_length: 64       # chirps per frame (Doppler bins)
+                         # MUST be a power of 2: 16, 32, 64, 128, 256
+  frame_period: 50.0     # ms - time between consecutive frame starts
+                         # 1/frame_period = frame rate in Hz
+
+# -- DCA1000 capture card --
+capture:
+  sys_ip: 192.168.33.30      # this PC's IP (static, on the DCA1000 subnet)
+  fpga_ip: 192.168.33.180    # DCA1000 FPGA's fixed IP
+  socket_buffer: 6291456     # OS UDP receive buffer in bytes (6 MB)

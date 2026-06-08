@@ -1,0 +1,40 @@
+# --- studies (research data; kept out of git on purpose) ---
+studies/
+!studies/.gitkeep
+
+# --- python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- uv ---
+uv.lock
+
+# --- build artifacts ---
+dist/
+build/
+*.so
+
+# --- data file types that should never be tracked ---
+*.dlog
+*.csv
+*.npz
+*.h5
+
+# --- OS noise ---
+.DS_Store
+Thumbs.db
+
+# --- editor noise ---
+.vscode/
+.idea/
+*.swp
+*~

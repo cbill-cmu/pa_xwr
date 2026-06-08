@@ -1,0 +1,36 @@
+[project]
+name = "pa_xwr"
+version = "0.1.0"
+description = "Automated power-consumption studies of TI mmWave radars using a Keysight N6705B DC power analyzer."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "Bill Chang" }]
+
+dependencies = [
+    "pyyaml>=6.0",
+    "numpy>=1.24",
+    "pandas>=2.0",
+    "matplotlib>=3.7",
+    "xwr",
+]
+
+[project.scripts]
+rps-sweep   = "pa_xwr.sweep:_main"
+rps-capture = "pa_xwr.capture:_main"
+rps-analyze = "pa_xwr.analyze:_main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# -----------------------------------------------------------------------------
+# uv-specific configuration for resolving the xwr dependency.
+#
+# Default: xwr is taken from a local checkout at ../xwr (sibling folder).
+# Edit the path below if your xwr clone lives elsewhere.
+# -----------------------------------------------------------------------------
+[tool.uv.sources]
+xwr = { path = "../xwr", editable = true }
