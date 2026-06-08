@@ -38,7 +38,7 @@ from typing import Any
 
 import yaml
 
-from pa_xwr import capture
+from radar_power_study import capture
 
 logger = logging.getLogger("sweep")
 
@@ -134,6 +134,46 @@ class Segment:
     error: str | None = None
 
 
+def _coerce_to_template_type(
+    device_template: dict,
+    radar_param: str,
+    swept_value,
+):
+    """Coerce a swept value to the same Python type as the corresponding
+    field in the device template.
+
+    The device template is treated as the schema oracle - whatever Python type
+    each field has in `devices/<radar>.yaml` is the type xwr expects. This
+    lets users write sweep values as `[25, 50, 100]` (YAML ints) even for
+    fields xwr wants as `float`, and avoids the inverse mistake (casting
+    everything to float, breaking fields xwr wants as int like `sample_rate`).
+
+    Bools are *not* treated as ints despite Python's bool-is-int inheritance.
+    """
+    radar = device_template.get("radar", {})
+    if radar_param not in radar:
+        # Unknown field. Let xwr complain about it rather than silently
+        # accepting a misspelled sweep parameter.
+        return swept_value
+
+    template_value = radar[radar_param]
+    template_type = type(template_value)
+
+    # bool is a subclass of int in Python; don't auto-convert numbers to bool.
+    if template_type is bool:
+        return swept_value
+
+    if isinstance(swept_value, template_type):
+        return swept_value
+
+    # Coerce numeric -> numeric (int <-> float). For other type mismatches,
+    # leave the value alone and let validate_config / xwr report the error.
+    if isinstance(swept_value, (int, float)) and template_type in (int, float):
+        return template_type(swept_value)
+
+    return swept_value
+
+
 def plan_segments(
     spec: dict,
     device_template: dict,
@@ -196,9 +236,11 @@ def plan_segments(
     segments: list[Segment] = []
     for seg_id, (pv, sv, rep) in enumerate(points, start=1):
         cfg = copy.deepcopy(device_template)
-        cfg["radar"][primary_param] = pv
+        cfg["radar"][primary_param] = _coerce_to_template_type(
+            device_template, primary_param, pv)
         if secondary_param is not None:
-            cfg["radar"][secondary_param] = sv
+            cfg["radar"][secondary_param] = _coerce_to_template_type(
+                device_template, secondary_param, sv)
 
         if secondary_param is None:
             label = f"{primary_param}={pv} rep={rep}"
