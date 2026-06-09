@@ -592,6 +592,45 @@ def write_summary_csv(enriched: list[dict], path: Path) -> None:
             w.writerow({c: row.get(c, "") for c in cols})
 
 
+def _dataframe_to_markdown(df, float_fmt: str = ".3f") -> list[str]:
+    """Render a pandas DataFrame as GitHub-flavored markdown table lines.
+
+    Reimplements the small subset of `df.to_markdown()` we need so we don't
+    have to depend on the optional `tabulate` package, which has been
+    fragile across pandas/Python versions.
+    """
+    import math
+
+    def cell(val) -> str:
+        if val is None:
+            return ""
+        if isinstance(val, float):
+            if math.isnan(val):
+                return ""
+            return f"{val:{float_fmt}}"
+        return str(val)
+
+    headers = [str(c) for c in df.columns]
+    rows = [[cell(v) for v in row] for row in df.itertuples(index=False)]
+
+    # Column widths for alignment (purely cosmetic; markdown renderers
+    # don't care, but it makes the raw .md readable).
+    widths = [len(h) for h in headers]
+    for r in rows:
+        for i, c in enumerate(r):
+            if len(c) > widths[i]:
+                widths[i] = len(c)
+
+    def fmt_row(cells):
+        return "| " + " | ".join(c.ljust(w) for c, w in zip(cells, widths)) + " |"
+
+    lines = [fmt_row(headers),
+             "|" + "|".join("-" * (w + 2) for w in widths) + "|"]
+    for r in rows:
+        lines.append(fmt_row(r))
+    return lines
+
+
 def write_results_readme(
     manifest: dict,
     anchor: TimeAnchor,
@@ -660,7 +699,7 @@ def write_results_readme(
     lines.append("## Aggregate results")
     lines.append("")
     if not agg.empty:
-        lines.append(agg.to_markdown(index=False, floatfmt=".3f"))
+        lines.extend(_dataframe_to_markdown(agg, float_fmt=".3f"))
     else:
         lines.append("_No successful segments to aggregate._")
     lines.append("")
