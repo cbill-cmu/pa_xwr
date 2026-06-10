@@ -42,7 +42,7 @@ radar:
 
   # -- Frame structure --
   frame_length: 64       # chirps per frame (Doppler bins)
-                         # MUST be a power of 2: 16, 32, 64, 128, 256
+                         # MUST be a power of 2 >= 4: 4, 8, 16, 32, 64, 128, 256
   frame_period: 50.0     # ms - time between consecutive frame starts
                          # 1/frame_period = frame rate in Hz
 

@@ -13,9 +13,9 @@
 # This is NOT a heatmap. It's a multi-line sweep plot.
 #
 # Total segments = len(primary.values) * len(secondary.held_at) * replicates
-#                = 5 * 2 * 3 = 30 segments
-# Total time = 30 * (segment_duration + idle_between) + 70 (cal at start+end)
-#            = 30 * 35 + 70 = 1120 s = ~19 minutes
+#                = 4 * 3 * 3 = 36 segments
+# Total time = 36 * (segment_duration + idle_between) + 70 (cal at start+end)
+#            = 36 * 35 + 70 = 1320 s = ~22 minutes
 # =============================================================================
 
 study_name: frame_period_x_frame_length
@@ -25,14 +25,14 @@ sweep:
   # The parameter we actually plot on the x-axis of the sweep curve.
   primary:
     param: frame_period
-    values: [100, 50, 25, 20, 10]
+    values: [100.0, 50.0, 33.33, 25.0, 20.0, 16.667] #10, 20, 30, 40, 50, 60 Hz
 
   # The parameter we hold constant within each "sub-sweep". The full sweep
   # runs once for each value listed here, producing one curve per value on
   # the final plot.
   secondary:
     param: frame_length
-    held_at: [64, 128]
+    held_at: [64, 128, 256]
 
   replicates: 3
   segment_duration: 30
