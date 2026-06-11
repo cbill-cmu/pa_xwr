@@ -18,7 +18,7 @@
 #            = 36 * 35 + 70 = 1320 s = ~22 minutes
 # =============================================================================
 
-study_name: frame_period_x_frame_length
+study_name: constant_frame_length_x_frame_rate
 device: AWR1843
 
 sweep:

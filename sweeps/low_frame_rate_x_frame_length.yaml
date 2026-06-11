@@ -18,7 +18,7 @@
 #            = 36 * 35 + 70 = 1320 s = ~22 minutes
 # =============================================================================
 
-study_name: frame_period_x_frame_length
+study_name: low_frame_rate_x_frame_length
 device: AWR1843
 
 sweep:
@@ -32,7 +32,7 @@ sweep:
   # the final plot.
   secondary:
     param: frame_length
-    held_at: [64, 128, 256]
+    held_at: [64, 128]
 
   replicates: 3
   segment_duration: 30

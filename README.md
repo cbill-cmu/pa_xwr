@@ -19,16 +19,17 @@ pa_xwr/
 ├── src/pa_xwr/                     the Python package
 │   ├── sweep.py                    orchestrator (the main entry point)
 │   ├── capture.py                  single-segment radar driver
-│   └── analyze.py                  offline analysis + plots
+│   ├── analyze.py                  offline analysis + plots
+|   └── FFT_zoom.py                 Close-up section of analysis plots with FFT information
 │
 ├── devices/                        one YAML template per radar variant
-│   ├── AWR1843.yaml
-│   └── IWR6843.yaml
-│
-├── sweeps/                         experiment specifications (you edit these)
+│   └── AWR1843.yaml
+│   
+├── sweeps/                         experiment specifications (EDITABLE)
 │   ├── frame_period_sweep.yaml
-│   └── frame_period_x_frame_length.yaml
-│
+│   ├── low_frame_rate_x_frame_length.yaml
+│   └── constant_frame_rate_x_frame_length.yaml
+|
 └── studies/                        gitignored; outputs of each run go here
 ```
 

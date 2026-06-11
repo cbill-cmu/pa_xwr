@@ -8,8 +8,18 @@ generates plots plus a summary report.
 
 Usage:
     uv run rps-analyze studies/<study-folder>/
-"""
 
+    # Default (looks for <study_dir>/raw/datalog.csv) — unchanged behavior
+    uv run rps-analyze studies/2026-06-10_AWR1843_frame_period_sweep_2/
+
+    # Override with a file under a different name in raw/
+    uv run rps-analyze studies/2026-06-10_AWR1843_frame_period_sweep_2/ \
+        --datalog studies/2026-06-10_AWR1843_frame_period_sweep_2/raw/run2_export.csv
+
+    # Override with a file anywhere on disk
+    uv run rps-analyze studies/2026-06-10_AWR1843_frame_period_sweep_2/ \
+        --datalog /tmp/scratch/just_downloaded.csv
+"""
 from __future__ import annotations
 
 import argparse
@@ -31,12 +41,11 @@ import matplotlib.patches as mpatches
 logger = logging.getLogger("analyze")
 
 # -----------------------------------------------------------------------------
-# CSV loading (handles both N6705B export variants we've seen in practice)
+# CSV loading
 # -----------------------------------------------------------------------------
 
 #: Fallback supply voltage used if a CSV is current-only.
 SUPPLY_VOLTAGE_V = 5.0
-
 
 def load_n6705b_csv(path: Path) -> pd.DataFrame:
     """Load a Keysight N6705B Datalogger CSV export.
@@ -499,8 +508,17 @@ def load_segments_csv(path: Path) -> list[dict]:
 # Main analysis pipeline
 # -----------------------------------------------------------------------------
 
-def analyze_study(study_path: Path) -> Path:
-    """Analyze one study folder. Returns the results folder path."""
+def analyze_study(study_path: Path, datalog_path: Path | None = None) -> Path:
+    """Analyze one study folder. Returns the results folder path.
+
+    Args:
+        study_path: the study folder produced by rps-sweep.
+        datalog_path: optional explicit path to the N6705B-exported CSV.
+            If None (default), looks at <study_path>/raw/datalog.csv.
+            If you exported the datalog under a different name, pass the
+            path here. May be absolute or relative to the current working
+            directory.
+    """
     study_path = study_path.resolve()
     results_dir = study_path / "results"
     results_dir.mkdir(exist_ok=True)
@@ -513,11 +531,14 @@ def analyze_study(study_path: Path) -> Path:
         cal_metadata = json.load(f)
     segments = load_segments_csv(study_path / "segments.csv")
 
-    datalog_path = study_path / "raw" / "datalog.csv"
+    if datalog_path is None:
+        datalog_path = study_path / "raw" / "datalog.csv"
+    else:
+        datalog_path = Path(datalog_path).resolve()
     if not datalog_path.exists():
         raise FileNotFoundError(
             f"No datalog at {datalog_path}. Export it from the N6705B "
-            f"and place it there before analyzing.")
+            f"and place it there, or pass --datalog with the right path.")
     logger.info("Loading datalog: %s", datalog_path)
     datalog = load_n6705b_csv(datalog_path)
     logger.info("Datalog: %d samples over %.1f s",
@@ -729,6 +750,11 @@ def _main() -> int:
         description="Analyze a power-study run.")
     parser.add_argument("study_dir", type=Path,
                         help="Path to the study folder")
+    parser.add_argument("--datalog", type=Path, default=None,
+                        help="Path to the N6705B-exported CSV. "
+                             "Defaults to <study_dir>/raw/datalog.csv. "
+                             "Use this if you exported the datalog under a "
+                             "different filename or to a different folder.")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
 
@@ -741,7 +767,7 @@ def _main() -> int:
         logger.error("Study folder not found: %s", args.study_dir)
         return 1
     try:
-        analyze_study(args.study_dir)
+        analyze_study(args.study_dir, datalog_path=args.datalog)
     except Exception as e:
         logger.exception("Analysis failed: %s", e)
         return 1

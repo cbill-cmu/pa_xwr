@@ -5,13 +5,7 @@
 # This is a valid xwr config YAML on its own. The sweep script reads it as a
 # starting point and overrides only the parameters being swept.
 #
-# To add a new radar to the study, copy this file, rename it, and adjust the
-# defaults and limits for that device. The sweep script doesn't need to know
-# anything about specific radars - it just substitutes values into whatever
-# template you point it at.
-#
-# Device-specific limits (for your reference - the xwr constraint check
-# enforces these at runtime):
+# Device-specific limits (The xwr constraint check enforces these at runtime):
 #   - L3 memory: 1 MB (limits adc_samples * frame_length * 4 * 2 * 2 < 1048576)
 #   - Frequency band: 76 - 81 GHz (FMCW band)
 #   - Max bandwidth: 4 GHz
@@ -36,7 +30,7 @@ radar:
   adc_start_time: 5.7    # us - ADC-sample-start delay after each chirp starts
 
   # -- ADC capture --
-  adc_samples: 256       # number of ADC samples per chirp (range bins)
+  adc_samples: 128       # number of ADC samples per chirp (range bins)
                          # MUST be a power of 2: 64, 128, 256, 512
   sample_rate: 10000     # ksps - ADC sample rate (max 25000 on this device)
 
