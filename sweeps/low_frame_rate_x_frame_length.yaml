@@ -1,23 +1,3 @@
-# =============================================================================
-# Sweep Spec: frame_period sweep at multiple values of frame_length
-# =============================================================================
-#
-# This is interpretation (b) of "2D" - we run the same 1-D sweep multiple
-# times, once for each value of a second parameter. The result is a single
-# plot with one line per `held_at` value, showing how the cost of varying
-# the primary parameter changes when the held parameter is different.
-#
-# Example reading: "frame_period of 25 ms costs ~X W with 64 chirps but ~Y W
-# with 128 chirps - so chirps-per-frame and frame rate interact."
-#
-# This is NOT a heatmap. It's a multi-line sweep plot.
-#
-# Total segments = len(primary.values) * len(secondary.held_at) * replicates
-#                = 4 * 3 * 3 = 36 segments
-# Total time = 36 * (segment_duration + idle_between) + 70 (cal at start+end)
-#            = 36 * 35 + 70 = 1320 s = ~22 minutes
-# =============================================================================
-
 study_name: low_frame_rate_x_frame_length
 device: AWR1843
 
@@ -27,9 +7,6 @@ sweep:
     param: frame_period
     values: [100.0, 50.0, 33.33, 25.0, 20.0, 16.667] #10, 20, 30, 40, 50, 60 Hz
 
-  # The parameter we hold constant within each "sub-sweep". The full sweep
-  # runs once for each value listed here, producing one curve per value on
-  # the final plot.
   secondary:
     param: frame_length
     held_at: [64, 128]
@@ -38,5 +15,4 @@ sweep:
   segment_duration: 30
   idle_between: 5
 
-  order: random        # randomizes ALL segments across both parameters
-                       # so thermal drift is distributed fairly
+  order: random      
