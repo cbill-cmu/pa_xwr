@@ -6,13 +6,12 @@ Keysight N6705B DC power analyzer records voltage and current. Offline
 analysis then segments the datalog, computes per-point statistics, and
 writes plots you can drop into a paper or lab notebook.
 
-Radar capture uses the [xwr](https://github.com/RadarML/xwr) library (Linux
-+ DCA1000EVM). This repo is the experiment harness around it: sweep
+Radar capture uses the [xwr](https://github.com/RadarML/xwr) library (Linux + DCA1000EVM). This repo is the experiment harness around it: sweep
 planning, time-sync, analysis, and device templates.
 
 Anyone with compatible hardware can clone this repository, pick or write a
 sweep spec, and measure how frame rate, frame length, or other chirp
-parameters change radar + capture-card power.
+parameters change for radar + capture-card power.
 
 ## What you need
 
