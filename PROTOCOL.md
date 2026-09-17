@@ -1,7 +1,11 @@
-# PROTOCOL: Automated Power-Sweep Study (v2)
+# PROTOCOL: Automated Power-Sweep Study
 
-This is the bench procedure for the automated parameter-sweep workflow
-For background and architecture, see [`DESIGN.md`](DESIGN.md).
+Bench procedure for running a parameter-sweep power study with this
+repository. For background and architecture, see [`DESIGN.md`](DESIGN.md).
+For a short overview and example plots, see [`README.md`](README.md).
+
+Example study folders (raw datalogs, configs, and plots) from AWR1843 bench
+runs: [Google Drive — Power Results](https://drive.google.com/drive/folders/1Gqs9I2LefKKor8hbqKdpcNKFs5eaXo2U?usp=drive_link).
 
 ---
 
@@ -10,7 +14,7 @@ For background and architecture, see [`DESIGN.md`](DESIGN.md).
 | Item | Purpose |
 |---|---|
 | Keysight N6705B DC Power Analyzer (2 channels) | 5 V source + V/I logging for both boards |
-| TI mmWave radar EVM (AWR1843, IWR6843, AWR2243, etc.) | Device under test |
+| TI mmWave radar EVM (xwr-supported: AWR1843, AWR1642, AWR2944, AWRL6844) | Device under test |
 | TI DCA1000EVM | LVDS-to-Ethernet capture card |
 | Heat sink for the radar | Required for sustained operation |
 | Linux PC with USB and Ethernet ports | Runs the sweep stack and xwr |
@@ -35,14 +39,16 @@ For background and architecture, see [`DESIGN.md`](DESIGN.md).
 On the Linux PC:
 
 ```bash
-# Clone the two repos as siblings.
-git clone https://github.com/RadarML/xwr.git
+# Clone this repo and install (pulls xwr from GitHub).
 git clone https://github.com/cbill-cmu/pa_xwr.git
-
-# Install:
-cd radar-power-study
+cd pa_xwr
 uv sync
 ```
+
+Capture requires **Linux**. `xwr` talks to the radar UART and the DCA1000
+over Ethernet; that stack is not supported on Windows. Analysis
+(`rps-analyze`) can run on any OS once you have a study folder and
+`raw/datalog.csv`.
 
 Verify Ethernet networking:
 - Set the Ethernet adapter connected to the DCA1000 to static IP
@@ -196,6 +202,14 @@ This will:
 5. Write `results/summary_table.csv` and `results/README.md`.
 
 Everything goes into `studies/<study-folder>/results/`.
+
+To confirm a segment chirped at the configured frame rate:
+
+```bash
+uv run rps-fft-zoom studies/<study-folder>/ 5
+# or every non-cal segment:
+uv run rps-fft-zoom studies/<study-folder>/ --all
+```
 
 ## 7. Verify the results
 

@@ -1,5 +1,5 @@
 # --- studies (research data; kept out of git on purpose) ---
-studies/
+studies/*
 !studies/.gitkeep
 
 # --- python ---

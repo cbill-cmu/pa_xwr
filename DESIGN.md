@@ -1,17 +1,22 @@
-# Design Document — Automated Parameter-Sweep Power Study (v2)
+# Design Document — Automated Parameter-Sweep Power Study
 
-**Status:** Draft for approval. Code will not be written until this is signed off.
+**Status:** Implemented. This document is the architecture for the code in
+`src/pa_xwr/`. Command names and folder layout in older sections may say
+`scripts/sweep.py`; the shipped entry points are `rps-sweep`, `rps-analyze`,
+and `rps-fft-zoom` (see [`README.md`](README.md)).
 
 ## 1. Goals
 
 1. **One-button sweeps.** Run a single Linux command that sweeps any chirp
    parameter (or pair of parameters) across user-specified values, with N
    replicates, while a single long N6705B datalog captures everything.
-2. **Device-agnostic.** Same sweep script works on AWR1843, AWR1443, AWR2243,
-   IWR6843, and other TI radars supported by xwr — by selecting a per-device
-   template YAML.
-3. **2-D cross-sweeps.** Vary two parameters together (e.g. `frame_period` ×
-   `frame_length`) to produce a heatmap of how they jointly affect power.
+2. **Device-agnostic.** Same sweep script works on any radar xwr supports —
+   AWR1843, AWR1642, AWR2944, AWRL6844, and future additions — by selecting a
+   per-device template YAML. This repo ships `devices/AWR1843.yaml`; add
+   another file under `devices/` to study a different board.
+3. **Multi-line cross-sweeps.** Vary a primary parameter at several held
+   values of a secondary parameter (e.g. `frame_period` at two `frame_length`s)
+   to produce overlaid power curves.
 4. **Reproducible studies.** Each experiment produces a single self-contained
    folder with provenance: every config used, all raw data, every plot, a
    manifest linking them, and a generated README.
@@ -23,16 +28,12 @@ The bench setup is identical to v1. What changes is what happens after
 
 ```
 ┌────────────────────────────────────────────────────────────────────┐
-│  1.  User boots Linux PC, opens terminal, navigates to xwr repo.   │
+│  1.  User boots Linux PC, opens terminal, navigates to pa_xwr.     │
 │                                                                    │
 │  2.  User runs:                                                    │
-│        uv run sweep.py --sweep <spec.yaml>                         │
+│        uv run rps-sweep --spec sweeps/<spec>.yaml                  │
 │                                                                    │
-│      The script prints:                                            │
-│        "Will run 45 segments, total ~32 minutes (incl. 35s         │
-│         calibration burst). Configure N6705B datalog to            │
-│         2000s @ 1ms sample period. Press Run on N6705B,            │
-│         then press Enter here within 5 seconds."                   │
+│      The script prints duration, then waits for Enter.             │
 │                                                                    │
 │  3.  User presses Run on N6705B. Press Enter on terminal.          │
 │                                                                    │
@@ -53,7 +54,7 @@ The bench setup is identical to v1. What changes is what happens after
 │      into the study folder.                                        │
 │                                                                    │
 │  7.  User runs:                                                    │
-│        uv run analyze.py <study_path>                              │
+│        uv run rps-analyze <study_path>                             │
 │                                                                    │
 │      Script anchors time using the calibration burst, segments     │
 │      the long datalog by segments.csv timestamps, computes         │
@@ -97,45 +98,39 @@ user that segment boundaries may be off by a few seconds.
 ## 4. File and Folder Structure
 
 ```
-power_study/                          (the repository / working directory)
+pa_xwr/                               (this repository)
 ├── DESIGN.md                         this document
+├── PROTOCOL.md                       lab procedure
 ├── README.md                         user-facing intro + quickstart
-├── PROTOCOL.md                       updated lab procedure document
 │
-├── devices/                          per-radar template YAMLs (you maintain)
-│   ├── AWR1843.yaml
-│   ├── AWR1443.yaml
-│   ├── IWR6843.yaml
-│   └── ...                           add more as needed
-│
-├── sweeps/                           sweep specification files (you write)
-│   ├── frame_period_only.yaml
-│   ├── frame_period_x_chirps.yaml    2-D sweep example
+├── devices/                          per-radar template YAMLs
+│   ├── AWR1843.yaml                  shipped; copy to add another xwr radar
 │   └── ...
 │
-├── scripts/
-│   ├── sweep.py                      the orchestrator (one entry point)
-│   ├── capture.py                    single-segment radar driver (internal)
-│   └── analyze.py                    offline analysis + plots
+├── sweeps/                           sweep specification files
+│   ├── frame_period_sweep.yaml
+│   └── ...
 │
-└── studies/                          one folder per actual experiment run
-    └── 2026-06-15_AWR1843_frame_period_sweep/
-        ├── manifest.json             provenance metadata
-        ├── sweep_used.yaml           copy of the sweep spec
-        ├── device_used.yaml          copy of the device template
-        ├── segments.csv              wall-clock log of every segment
-        ├── capture.log               full stdout/stderr from sweep.py
-        ├── raw/
-        │   └── datalog.csv           N6705B export goes here
-        └── results/                  generated by analyze.py
-            ├── README.md             auto-generated study summary
-            ├── summary_table.csv     per-segment stats
-            ├── timeseries_full.png   full datalog with segment shading
-            ├── sweep_curve.png       1-D plot: param vs power
-            ├── heatmap_2D.png        2-D plot (only for 2-D sweeps)
-            └── segments/             per-segment time-series plots
-                ├── seg_001.png
-                └── ...
+├── src/pa_xwr/
+│   ├── sweep.py                      orchestrator (`rps-sweep`)
+│   ├── capture.py                    single-segment radar driver
+│   ├── analyze.py                    offline analysis + plots (`rps-analyze`)
+│   └── FFT_zoom.py                   frame-rate check (`rps-fft-zoom`)
+│
+└── studies/                          one folder per experiment run (gitignored)
+    └── 2026-06-09_AWR1843_frame_period_sweep_2/
+        ├── manifest.json
+        ├── sweep_used.yaml
+        ├── device_used.yaml
+        ├── segments.csv
+        ├── capture.log
+        ├── raw/datalog.csv
+        └── results/
+            ├── README.md
+            ├── summary_table.csv
+            ├── timeseries_full.png
+            ├── sweep_curve.png
+            └── segments/
 ```
 
 **Key change from v1:** results don't accumulate in shared folders. Each study
@@ -379,109 +374,32 @@ seg_id, replicate, frame_period, frame_length, radar_mean_P_W, radar_peak_I_A, \
 | Calibration burst not detected by analyzer | Pattern matching fails on full datalog | Fall back to wall-clock timing, warn user |
 | User starts datalog too late, misses calibration | Cal pulses appear before datalog t=0 | Analyzer detects this and errors with "datalog appears to start after calibration; rerun with datalog started earlier" |
 
-## 8. Open Questions for You
+## 8. Design decisions (resolved)
 
-These are decisions I'm not certain about. Please confirm or override before I
-implement.
-
-### Q-A: Do you want the calibration burst at the end too?
-
-Adding a 35 s cal burst at the end (after the last segment) provides a second
-time anchor and lets the analyzer measure drift in the datalogger's clock vs.
-the script's clock. Useful for very long sweeps (>1 hour). Costs another
-35 s. I'd default to **yes** for long sweeps, **no** for short ones.
-
-### Q-B: What's the max sweep duration we should allow?
-
-The N6705B's datalog at 1 ms sample period × 5 columns produces a CSV at
-about **170 KB per second**. So a 30-minute sweep = ~300 MB CSV; a 2-hour
-sweep = ~1.2 GB. Both are workable but the 2-hour one is annoying to move
-around. I'd add a soft warning at 1 hour and a hard refusal at 2 hours
-unless the user passes `--allow-huge`. OK?
-
-### Q-C: Plotting library — matplotlib only, or add seaborn/plotly?
-
-v1 uses matplotlib alone. For 2-D heatmaps, matplotlib's `pcolormesh` is fine
-but plain. Seaborn would give prettier heatmaps for free. Plotly would let
-users interact with the plots in a browser. I'd default to **matplotlib only**
-for fewer dependencies, but I want to confirm.
-
-### Q-D: Should I update PROTOCOL.md or write a new one?
-
-The existing PROTOCOL.md document was for the manual 15-run procedure. The
-new flow is different enough that I think it's cleaner to **archive the old
-PROTOCOL.md as PROTOCOL_v1.md** and write a new PROTOCOL_v2.md focused on the
-sweep flow. Confirm.
-
-### Q-E: Should the analyzer also output a LaTeX/Markdown report stub?
-
-For a "scientific report" deliverable, the analyzer could auto-generate a
-publication-template markdown file with embedded plots, methodology
-paragraph, and a results table. You'd then edit it for narrative. Want this,
-or is the auto-generated `results/README.md` summary enough?
-
-### Q-F: Replicate ordering — random or grouped?
-
-I've defaulted `order: random` in the sweep spec for thermal-fairness
-reasons (§5.2). The other reasonable default is `primary_first` (run all
-replicates of one parameter combination back-to-back). Random is more
-defensible in a paper; grouped is easier to debug. Confirm which default
-you want.
+| Topic | Choice in this repo |
+|---|---|
+| End calibration burst | Always run a matching 35 s burst after the last segment |
+| Plotting | matplotlib only |
+| Lab procedure | [`PROTOCOL.md`](PROTOCOL.md) describes the automated sweep flow |
+| Study report | Analyzer writes `results/README.md` plus CSV/PNG artifacts |
+| Replicate order | Sweep specs default to `order: random` so thermal drift is not confounded with a parameter value |
 
 ## 9. Migration from v1
 
-| v1 artifact | What happens in v2 |
-|---|---|
-| `power_analysis_experiment.md` | Renamed to `PROTOCOL_v1.md`, archived |
-| `analyze_power.py` | Replaced by `scripts/analyze.py` (similar logic, new segmentation) |
-| `MyCapture.py` | Replaced by `scripts/capture.py` (called internally by sweep.py) |
-| `configs/01_light.yaml` etc. | Replaced by `devices/AWR1843.yaml` + a sweep spec |
-| 15 separate CSVs (T0_R1.csv etc.) | One `raw/datalog.csv` per study, segmented at analysis time |
-| Existing collected data | Re-analyzable with a new `scripts/analyze_v1_csvs.py` shim if you want to keep the old results |
+v1 was a manual 15-run procedure with separate CSVs. v2 replaces that with
+one long N6705B datalog per study, segmented by `segments.csv`. Old
+`analyze_power.py` / `MyCapture.py` / per-run YAML configs are gone; use
+`rps-sweep` + `rps-analyze` and a device template + sweep spec instead.
 
-If you have v1 data you want to keep analyzable, tell me and I'll keep a
-`legacy/` subfolder with the old analyzer working. Otherwise it can go.
+## 10. Implementation notes
 
-## 10. Implementation Order
+The stages below are historical (the code is in `src/pa_xwr/` now):
 
-I'll build this in stages and check in at each. You can stop me partway if
-anything's wrong.
+1. Device templates and 1-D / multi-line sweep specs
+2. Sweep orchestrator with wall-clock logging
+3. Start/end calibration bursts and `analyze.py` segmentation
+4. Multi-line sweep curves and auto-generated `results/README.md`
+5. Bench protocol, README, and example studies
 
-**Stage 1 — Device templates and sweep specs**
-- Write `devices/AWR1843.yaml` and one example each of 1-D and 2-D sweep specs
-- Get your approval on the formats before writing scripts that depend on them
-
-**Stage 2 — sweep.py (no calibration burst yet)**
-- Implement the orchestrator with wall-clock-only timing
-- Run end-to-end with a tiny test sweep (2 segments × 1 replicate) to verify
-- Iterate based on real run feedback
-
-**Stage 3 — Calibration burst + analyzer**
-- Add cal burst to sweep.py
-- Implement analyze.py with cal-burst detection, segmentation, and 1-D plots
-
-**Stage 4 — 2-D heatmap and report generation**
-- Add 2-D plot support
-- Add auto-generated `results/README.md`
-
-**Stage 5 — Documentation**
-- Write PROTOCOL_v2.md
-- Update README.md
-- Generate worked example using a full sweep
-
-Each stage produces something you can run. I'll show you the artifacts at each
-stage and we'll iterate before moving on.
-
-## 11. What I Need From You
-
-Please confirm or amend:
-
-1. The folder structure (§4)
-2. Sweep spec format (§5.2)
-3. Device template format (§5.1)
-4. Time-sync via calibration burst (§3)
-5. Open questions Q-A through Q-F (§8)
-6. Migration plan (§9)
-7. Implementation order (§10)
-
-If anything's wrong, push back. Once approved, I'll start Stage 1.
+To add a radar that xwr supports, add `devices/<Name>.yaml` — the sweep
+script stays device-agnostic. See [`README.md`](README.md).
